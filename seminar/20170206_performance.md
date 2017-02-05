@@ -3,8 +3,6 @@
 ## 들어가며
 -- 내용적어보고 한줄요약 할 내용 
 
-![compile](./compile.png)
-
 ## 왜 성능이 중요한가? - 사용자 사용패턴
 
 <table>
@@ -52,227 +50,259 @@ A: 이번에 open 하는 태국 서비스를 모바일웹 이기도 하니 성�
  - 분석은 어떻게 하나?
  - 분석결과를 가지고 개선하기 (최적화)
 			
-## Major Cineplex 성능 테스트 대상 예상
+## 성능 최적화 1
+#### 1. nGrinder 부하테스트
+- 가상사용자로 실제 사용자를 대체
+- 서버환경은 리얼환경과 동일하겠지만 테스트 데이터 부족, real 데이터 예측 불가능 
+- 부하 발생 예측이 어려움
 
-#### 1. Home > 영화 리스트 > 포스터 이미지 로딩
-- 이미지 로딩시 cdn 이용할 수 없는데(원격이미지라서..) 이럴때 성능최적화 할 수 있나?
-- 시간 얼마 걸리는지 패킷 분석해보기
+![nGrinder](./tps.PNG)
+[그림 1] Major Cineplex 부하 테스트 결과
 
-#### 2. Home > 영화 리스트 > 페이징 (lazy loading)
+#### 2. 모바일웹 응답속도 확인
+- 라인 채널 웹뷰는 앱하고 token을 주고 받아 인증 후에 띄우는 방식이라 실제 앱에서 테스트를 해야만 했다.. 
+- 찰스 : HTTP proxy를 구성해서 웹 클라이언트와 서버 사이를 오가는 통신을 가로채서 둘 사이의 모든 요청과 응답
+ 그리고 HTTP headers를 적나라하게 보  여주는 아주 막강한 웹 디버깅 애플리케이션.
+- 유료툴이므로 학습시간 및 비용 소요 (사내라이선스)
+- 앱 proxy 설정방법 링크 및 import
+
+![charles2](./charles2.png)
+[그림 3] charles 실행 화면
+
+#### 3. API 응답 지연에 대한 방안
+- major cineplex 에서 영화관, 영화, 상영정보, 좌석정보, 티켓정보 필요한 데이터를 API를 통해 전달받는다.
+- API 응답속도 느림.
+
+###### 방법)
+- Batch 로 api 데이터 미리 받기
+- 실시간으로 api 호출하지 않고 대량 데이터 여부 및 데이터의 적시성 여부에 따라 일부를 배치 방식으로 개선
+
+![apidata](./apidata.PNG)
+
+[그림 4] Major Cineplex batch data db schema
+
+- 예매 가능한 좌석정보는 적시성을 요하는 정보로 실시간으로 서비스를 해야한다. (batch 관리 어려움)	
+- Timeout 지정해서 지연되면 alert 문구 노출로 노티 > 로딩화면 시간 최소화	
+- 문구노출이 빈번해 져서 불안정한 서비스처럼 보이는건 비슷…
+- 적합한 타임아웃값을 찾는 것이 만만치 않다…
+
+###### 질문 : 외부 api 응답 지연시 빠르게 보일 수 있는 방법이 있나요?
+- 있다?
+- 어쩔수 없다...
+
+#### 4. 모바일웹 최적화
+- PC용 웹 최적화보다 더 까다롭다. 
+- 모바일 디바이스는 하드웨어 성능이 PC 비해 매우 낮고, 모바일 디바이스의 종류도 매우 다양하기 때문에 최적화가 더 어려움.
+
+###### 웹앱의 수행 성능을 결정짓는 것은 브라우저다.
+- 렌더링 엔진, 자바스크립트 실행 엔진의 성능도 중요
+- 렌더링한 결과를 보여주는 그래픽 디바이스나 디바이스 드라이버의 성능 또한 브라우저 성능에 지대한 영향을 끼친다.
+- ==> 이건... 어쩔 수 없어보인다.
+
+###### 보이지  부분은 지연로딩 (lazy-loading) 기법을 사용한다.
+- Home > 영화 리스트 > 페이징 (lazy loading)
 - 장점 : 초기 페이지 로딩 체감 속도 향상 기대, 사용자가 명시적으로 페이징 데이터를 요청하지 않아도 된다.
 - 단점 : 스크립트 과다 사용에 의한 성능 감소
 
-#### 3. 영화 상영시간 정보 테이블 > 대량의 데이터 (약 7만건) 
-- 이슈) 상영시간 업데이트가 잦아 7만건 전체 빈번한 업데이트 쿼리 수행
-- 성능에는 영향이 없을까
-- 오랜 업데이트로 select 에는 이슈는 없는지…
-
-#### 4. 영화 정보 테이블, 영화 상영시간 정보 테이블 > 영화이름 like 연산
-- 영화 리스트, 영화 상영시간 Major cineplex API 통해 전달
-- 각각의 API 에서 넘어오는 영화이름 상이
-
-#### 5. Major Cineplex api 응답지연으로 페이지 로딩속도 저하
-
-#### 6.	좌석 선택 validation 및 기타 javascript 성능확인
-- 어느 정도의 스크립트가 있어야 성능에 영향을 줄까??
-#### 7.CSS, Image 파일 cdn 업로드
-- 리소스를 외부에 두었을 떄 좋은점?
+###### CSS, Image 파일 cdn 업로드
+- 리소스를 외부에 두었을  좋은점?
 - Image optimization, CSS preprocessors : 이미지와 스타일링은 Front-end 성능 최적화의 핵심요소.
 - 적절한 component의 선택은 서비스의 확장성(Scalability)뿐 아니라 성능에도 영향
-#### 8.	과도한 트래픽에 따른 부하테스트(nGrinder) : 서버 성능 테스트 – TPS조사 라인앱은 얼마고, 씨네는 그래서 얼마다…(위키 조사)
-#### 9. 라인 채널 앱뷰 응답속도 테스트(charles)
-#### 10. Mobile Performance
-- mobile환경에서 성능 최적화를 할 때 일반적인 브라우저와 어떤 다른 점이 있으며, 또 어려운 점이 있는지, + 
-  그 기술적인 장애 요소와 이것을 극복하기위한 방법
-- 3g, 4g, lte : 네트워크 환경은 성느 최적화에 도움을 주며 다른 네트워크 환경에서 중점을 두어야 할 것
-- 성능 측정 방법?
-	
-## 제대로된 성능 검증의 어려움 
-- 라인 채널 웹뷰는 앱하고 token을 주고 받아 인증 후에 띄우는 방식이라 실제 앱에서 테스트를 해야만 했다.. 도메인 입력 후 테스트 하면 제대로 로딩이 안된다.. ㅜㅜ 
-- 시간, 비용 많이 소요, 부하 발생 예측이 어려움, 가상사용자로 실제 사용자를 대체
-- beta test data 부족
-- real 데이터 예측 불가능
 
-5.	성능을 분석해보자
-A.	응답시간 – 일반 pc/mobile 응답시간확인법 vs 라인채널 웹뷰의 응답시간 확인법
-B.	부하테스트 – 쇼타임 테이블 select 하는 테스트 페이지 만들어서 부하 테스트 해보자
-C.	웹앱의 수행 성능을 결정짓는 것은 브라우저다.
-i.	렌더링 엔진 , 자바스크립트 실행 엔진의 성능도 중요하다..(브라우저가 html 을 읽는 방법 – 예전에 세미나 자료 봐보기), 렌더링한 결과를 보여주는 그래픽 디바이스나 디바이스 드라이버의 성능 또한 브라우저 성능에 지대한 영향을 끼친다.
-ii.	브라우저의 수행성능 향상은… 어찌해볼수 있는게 아니지 않나??
-6.	분석 후 최적화, 결과 도출 (쿼리 튜닝에 포커스를 맞출까?)
-A.	성능향상을 위한 mysql 쿼리 작성법
-i.	http://gywn.net/2011/12/mysql-three-features/ mysql 세가지 특징?
-ii.	https://dev.mysql.com/doc/refman/5.7/en/insert-speed.html
-1.	
-B.	API 응답 지연에 대한 방안
-i.	Batch 로 api 데이터 미리 받기
-1.	실시간으로 api 호출하지 않고 대량 데이터 여부 및 데이터의 적시성 여부에 따라 일부를 배치 방식으로 개선
-ii.	Addticket 같은 경우는 batch 로 관리하기 어려움..
-1.	예매 가능한 좌석정보는 적시성을 요하는 정보로 실시간으로 서비스를 해야한다.
-2.	Timeout을 줘서 지연되면 alert 문구 노출 > 문구노출이 빈번해 져서 불안정한 서비스처럼 보이는건 비슷…, 적합한 타임아웃값을 찾는 것이 만만치 않다…
-3.	외부 api 응답 지연시 빠르게 보일 수 있는 방법이 있나?
-4.	아님.. 어쩔수 없나…
-C.	모바일웹 최적화
-i.	Pc용 웹 최적화보다 더 까다롭다. 모바일 디바이스는 하드웨어 성능이 pc에 비해 매우 낮고, 모바일 디바이스의 종류도 매우 다양하기 때문에 최적화가 더 어렵다.
-ii.	HTML5 시맨틱 태그인 <header>,  <footer>, <nav> 등을 이용해 필요한 HTML 코드의 크기를 줄인다.
-iii.	인라인 이미지 (inline image) 등을 이용해서 가급적 서버로의 요청 횟수를 줄인다.
-iv.	Ontouched 이벤트를 사용한다. Onclick 이벤트보다 300~500ms 더 빠르다.
-v.	애니메이션은자바스크립트로 만들지 말고 css3의 transition 속성이나 애니메이션 기능을 사용한다.
-vi.	보이지 안흔 부분은 지연로딩 (lazy-loading) 기법을 사용한다.
-vii.	자바스크립트로 DOM에 접근할 때 매우 느리다… 그래서 새로운 데이터를 저장할 때에는 가급적 DOM 구조에 저장하지 말고 자바스크립트 변수에 넣어 두고 사용.
-1.	D2url 공유
-2.	자바스크립트의 크기도 중요하지만 자바스크립트가 실제로 로드되어 메모리를 얼마나 사용하는지도 성능의 고려 대상이다.
+###### 기타 Front-End 성능 tips
+- 인라인 이미지 (inline image) 등을 이용해서 가급적 서버로의 요청 횟수를 줄인다.
+- 불필요한 HTML 제거
+- HTML5 시맨틱 태그인 \<header\>,  \<footer\>, \<nav\> 등을 이용해 필요한 HTML 코드의 크기를 줄인다.
+- Ontouched 이벤트를 사용한다. Onclick 이벤트보다 300~500ms 더 빠르다.
+- 애니메이션은자바스크립트로 만들지 말고 css3의 transition 속성이나 애니메이션 기능을 사용한다.
+- 자바스크립트로 DOM에 접근할 때 매우 느리다…  
+- 그래서 새로운 데이터를 저장할 때에는 가급적 DOM 구조에 저장하지 말고 자바스크립트 변수에 넣어 두고 사용.
+- javascript : 자바스크립트의 크기도 중요하지만 자바스크립트가 실제로 로드되어 메모리를 얼마나 사용하는지도 성능의 고려 대상이다.
 
-8.	마무리
+## 성능최적화 2 (성능향상을 위한 mysql 쿼리 작성)
+- 성능향상을 위한 또 하나의 방법은 쿼리 수행속도를 빠르게 하는 방법이 있다.
+- 앞에서 설명한 방법으로도 성능향상이 가능하지만 쿼리튜닝으로 몇십 배에서 몇백 배의 성능향상이 가능하다.
+- 쿼리성능 하면 가장먼저 떠오르는 것은 인덱스! 실행계획을 분석하여 쿼리성능을 최적화 해보자.
+
+#### 1. 영화 상영시간 정보 테이블 > 대량의 데이터 빈번한 업데이트 (약 7만건) 
+- 오랜 업데이트로 select 조회시 이슈 없는지? 레코드락 으로 select 조회 영향?
+ - 결론 : 이슈없음.
+ - mysql의 isolation 수준에따라 달라지겠지만 보통의 READ COMMITED 에서는 update 수행전 기록되는 UNDO 로그를 읽는다.
+ - Multi insert 
+  - 인덱스가 생성된 테이블에서 insert 구문이 수행이 되면 추가된 레코드를 포함하여 인덱스를 재생성 한다.(성능저하)
+  - insert 속도를 최적화하려면 작은 작업들을 하나의 큰 작업으로 결합 하면 된다.
+  - 단일 연결을 만들고, 한번에 새로운 행의 데이터들을 보내고, multi row 의 작업이 끝난 후 인덱스 업데이트 및 일관성 검사를 하면된다.
+  - 하지만 대량의 데이터 업데이트 시 out of memory 발생 (5000건이상부터는 느려지고 10000건 업데이트 시 에러발생)
+  - 쿼리생성 전 파라메터로 보내는 리스트의 null 체크 필요
+  
+```xml
+INSERT INTO cineplex_movie_showtimes
+      (cinema_id, session_id, session_datetime, session_day_of_week, seat_available, screen_num, screen_name, movie_title_en, movie_title_en2, movie_title_th, movie_rating, movie_duration, create_ymdt, last_mod_ymdt)
+     VALUES
+    <foreach collection="list" item="showtime" separator=",">
+     (
+        #{showtime.cinemaId},
+        #{showtime.sessionId},
+        #{showtime.sessionDateTime},
+        #{showtime.sessionDayOfWeek},
+        #{showtime.seatsAvailable},
+        #{showtime.screenNum},
+        #{showtime.screenName},
+        #{showtime.movieName},
+        #{showtime.movieTitleEn2},
+        #{showtime.movieName2},
+        #{showtime.movieRating},
+        #{showtime.filmDuration},
+        NOW(),
+        NOW()
+        )
+    </foreach>
+     ON DUPLICATE KEY UPDATE
+      cinema_id = VALUES(cinema_id),
+      session_id = VALUES(session_id),
+      session_datetime = VALUES(session_datetime),
+      session_day_of_week = VALUES(session_day_of_week),
+      seat_available = VALUES(seat_available),
+      screen_num = VALUES(screen_num),
+      screen_name = VALUES(screen_name),
+      movie_title_en = VALUES(movie_title_en),
+      movie_title_th = VALUES(movie_title_th),
+      movie_rating = VALUES(movie_rating),
+      movie_duration = VALUES(movie_duration),
+      last_mod_ymdt = NOW()
+```
+
+- 업데이트 성능 
+ - wiki: [업데이트 로직 수행속도 테스트][linepay]
+   [linepay]: http://wiki.navercorp.com/pages/viewpage.action?pageId=331925875 "Go linepay"
+   
+#### 2. 영화 정보 테이블, 영화 상영시간 정보 테이블 > 영화이름 like 연산
+- 영화 리스트, 영화 상영시간 Major cineplex API 통해 전달
+- 각각의 API 에서 넘어오는 영화이름 상이
+ - ex) 반지의 제왕3 vs 반지의 제왕3(3DX), 반지의 제왕3(4DX), 반지의 제왕3(IMAX)
+```xml
+EXPLAIN SELECT * FROM cineplex_movie_showtimes_test WHERE movie_title_en LIKE 'Raiders%';
+
+EXPLAIN SELECT * FROM cineplex_movie_showtimes_test WHERE movie_title_en LIKE '%Raiders%';
+```
+![like수행속도](./like비교.png)
+
+[그림 5] like 연산자 실행계획
+
+- LIKE 연산자는 와일드카드 문자가 검색어 뒤쪽에 있다면 인덱스 레인지 스캔으로 사용할 수 있다. 
+- 와일드 카드가 앞쪽에 있으면 인덱스의 left-most 특성으로 레인지스켄 사용 못하고 테이블 풀 스캔 방식으로 쿼리 처리한다.
+
+#### 3. 프로모션 > 공유된 url로 결제시 > 포인트 지급 > 유저당 누적 포인트 group by
+- group by절에 명시된 칼럼의 순서가 인덱스를 구성하는 컬럼의 순서와 같으면 일단 인덱스를 이용할 수 있다.
+ - Group by 절에 명시된 칼럼이 인덱스 칼럼의 순서와 위치가 같아야 한다.
+ - 인덱스를 구성하는 컬럼 중에서 뒤쪽에 있는 칼럼은 group by 절에 명시되어 있지 않아도 인덱스를 사용할 수 있지만 인덱스의 앞쪽에 있는 칼럼이 groub by 절에 명시되지 않으면 인덱스를 사용할 수 없다.
+ - Where 조건 절과는 달리 groupby 절에 명시된 컬럼이 하나라도 인덱스에 없다면 group by 절은 전혀 인덱스를 이용하지 못한다. 
+
+```xml
+EXPLAIN SELECT
+        sh.mid AS MID,
+        DATE_FORMAT(NOW(), '%Y%m%d') AS createYmd,
+        IF (COUNT(sh.mid) * 25 > 200, 200, COUNT(sh.mid) * 25) AS rewardAmount
+    FROM cineplex_share sh INNER JOIN cineplex_share_payment shp ON sh.share_seq = shp.share_seq 
+    AND sh.create_ymdt >= '2017-01-26 00:00:00' AND sh.create_ymdt <= '2017-01-26 23:59:59'
+    GROUP BY sh.mid ORDER BY NULL
+```
+
+- ORDER BY NULL
+ - group by는 내부적으로 정렬도 동시에 일어난다. 
+ - order by를 명시하지 않아도 group by a, b order by a, b 로 처리한다. ==> 성능저하의 원인
+ - 그룹핑은 하되 정렬은 필요 없을 경우 사용한다.
+ 
+#### 4. where 조건이 인덱스를 사용하는 방법
+- 크게 범위 제한 조건과 체크 조건으로 구분한다.
+```xml
+SELECT * FROM dept_emp
+WHERE dept_no BETWEEN ‘d003’ AND ‘d005’ AND emp_no = 10001;
+
+idx (dept_no, emp_no)
+```
+
+- 두개의 컬럼이 순서대로 결합 인덱스일 경우 dept_no 조건이 동등조건이 아닌 크다 작다 비교이므로 뒤 컬럼인 emp_no 조건은 범위 제한 조건으로 사용되지 못하고 체크 조건으로 사용된다.
+
+#### 5. 조건이 or 일 때 주의
+```xml
+SELECT *  FROM employes
+WHERE first_name = ‘kebin’ OR last_name = ‘Poly’;
+
+idx (first_name)
+```
+
+- first_name 은 인덱스 이용가능, last_name은 인덱스를 사용할 수 없다.(풀테이블 스캔)
+- 풀테이블 스캔 + 인덱스 레인지 스캔 보다는 플테이블 스캔 한번이 더 빠르기 때문에 위에 경우는 풀 스캔이 일어난다.
+- 만약 각 컬럼에 인덱스가 있다면 index_merge 접근 방법으로 실행 할 수 있다. 
+- 하지만… 제대로된 인덱스 하나를 레인지 스캔 하는 것보다는 느리다…
+  
+#### 6. subquery
+- select절에 사용된 서브쿼리
+ - 내부적으로 임시테이블을 만든다거나 쿼리를 비효율적으로 실행하도록 만들지는 않기 때문에 서브쿼리가 적절히 인덱스를 사용할 수 있다면 크게 주의할 사항은 없다.
+ - 하지만 조인으로 처리해도 되는 쿼리를 select 의 서브 쿼리를 사용해서 작성할 때도 있다.
+ - 서브쿼리로 실행하는 것보다는 조인으로 처리할 때가 훨씬 빠르기 때문에 가능하다면 조인으로 쿼리를 작성하는 것이 좋다
+ 
+- where절에 단순비교로 사용된 서브쿼리
+```xml
+Select * from dept_emp de
+Where de.emp_no = 
+(select e.emp_no from employess e where e.first_name=’georigi’ and e.last_name=’facello’ limit 1)
+```
+
+- mysql 은 서브 쿼리의 최적화가 부족하다.
+- 예상
+ - 서브쿼리를 먼저 실행 후 상수로 변환하고, 그 조건을 범위 제한 조건으로 사용 ==> 일반적
+ - mysql 5 이하 : dept_emp 테이블을 풀 테이블 스캔으로 레코드를 한건씩 읽으면서 서브쿼리를 매번 실행해서 서브쿼리가 포함된 조건이 참인지 비교
+ - mysql 5.5 이상 : 서브쿼리가 먼저 실행되어 그 결과를 외부쿼리의 조건으로 사용
+ 
+ ```xml
+Select * from dept_emp de
+Where de.dept_no IN 
+(select d.dept_no from departments d where d.dept_name=’FINANCE’)
+```
+- where 절에 in과 함께 사용된 서브쿼리
+ - mysql 5 이하 : mysql 옵티마이저에 의해 in 부분이 exists 형태로 변환되어 실행 되어 외부 쿼리를 풀테이블 스캔을 사용할 수 밖에 없다.
+ - mysql 5.5 이상 : 최적화 됨
+ 
+ ```xml
+ EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE movie_title_en IN (SELECT movie_title_en FROM cineplex_movie WHERE movie_title_en = 'Jumanji');
+EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE movie_title_en = (SELECT movie_title_en FROM cineplex_movie LIMIT 1);
+EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE movie_title_en NOT IN (SELECT movie_title_en FROM cineplex_movie WHERE movie_title_en = 'Jumanji');
+ ```
+![서브쿼리](./서브쿼리.png)
+
+[그림 6] subquery 실행계획
+
+#### 7. delete
+- Truncate 가 delete from 보다 더 빠르다. 
+- 하지만 트랜잭션-safe 하지 않다.
+- 활성 트랜잭션 또는 활성 테이블 잠금 중 하나를 시도 할 때 오류가 발생한다.??
+ - error occurs when attempting one in the course of an active transaction or active table lock
+
+#### 8. 문자열과 숫자 비교
+- cinema_id는 문자열 컬럼, where절 문자열 vs 숫자비교
+
+```xml
+EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE cinema_id = '0000000002';
+EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE cinema_id = 0000000002;
+```
+![컬럼타입](./컬럼타입.png)
+
+[그림 7] 문자열, 숫자비교 
+
+- mysql이 내부적으로 문자열 타입을 숫자 타입으로 변환 후 비교 작업을 처리한다.
+- 이러한 문제는 문자열 비교보다 숫자 값의 비교가 빨라서 mysql 옵티마이저가 숫자 타입에 우선권을 부여하기 때문에 발생하는 문제이다.
+- mysql 특징으로 컬럼 타입에 맞지 않는 다른 타입이 들어오면 자동 변환되서 들어가는데 자칫 놓칠 수 있는 부분이다.
+- 저장하고자 하는 값의 타입에 맞게 칼럼의 타입을 선정하자.
+- 반대로 테이블의 컬럼은 숫자타입인데, sql비교 조건을 문자열 값과 비교하는 경우에는 이런 현상이 발생하지 않는다. 
+ - 상수값으로 지정한 문자열을 숫자타입으로 먼저 변환 후 cinema_id 컬럼과 비교하기 때문이다.
+ 
+## 마무리
+개발을 진행하면서 몰랐던 속도개선건 까지 확인을 하니 시간이 좀 부족한것 같다 학습시간이 요 내용을 바탕으로 성능개선을 위해 처리해야할 것들이 많은데3g, 4g, lte등등 좀더 알아보고정리를해야겠
 예전에 전사 이슈로 서비스 속도개선건이 화두에 오른적이 있었다. 그때는 Script, CSS, Image Size 등 Front-End 에 초점이 맞춰져 있었다. 그 후에 스크립트 lazy loading 이나 cdn 사용으로만 처리하고 성능테스트는 자세히 하지 않았던 것 같다. 대충 서비스 돌려보고.. 빠름, 보통, 느림 으로 구분을 했었다..
 이번엔 기존에 존재하는 major Cineplex 앱이 너무 느려서.. line 웹뷰로 서비스를 할 때 좀더 빠르게 할 수 없을까.. 고민을 많이 했다.
 이를 계기로 성능 최적화에 대한 다방면으로 알 수 있었고, 쿼리성능 향상에 깊은 고민을 해본 좋은 기회라고 생각한다.
 이런 내용을 알고 좋은 개발 습관을 가진다면 사용자의 만족도를 높이는 빠르고 좋은 서비스를 만들 수 있을 것 같다.
 
-https://dev.mysql.com/doc/refman/5.7/en/insert-speed.html
-
-Insert 속도를 최적화하려면 작은 작업들을 하나의 큰 작업으로 결합 하면 된다.
-단일 연결을 만들고, 한번에 새로운 행의 데이터들을 보내고, multi row 의 작업이 끝난 후 인덱스업데이트 및 일관성 검사를 하면된다.
-
-하나의 행을 insert 하는데 필요한 시간 (대략적인 비율) :
-Connecting: (3)
-
-Sending query to server: (2)
-
-Parsing query: (2)
-
-Inserting row: (1 × size of row)
-
-Inserting indexes: (1 × number of indexes)
-
-Closing: (1)
-
-테이블의 크기가 인덱스 삽입 속도를 느리게 한다.?
-
-Insert 속도 높이는 방법 : 
-같은 클라이언트에서 여러 행을 동시에 삽입하는 경우 여러 VALUES 목록과 함께 INSERT 문을 사용하여 한 번에 여러 행을 삽입하십시오. 별도의 단일 행 INSERT 문을 사용하는 것보다 훨씬 빠릅니다 (어떤 경우에는 여러 번 더 빠름). 비어 있지 않은 테이블에 데이터를 추가하는 경우 bulk_insert_buffer_size 변수를 조정하여 더 빨리 데이터를 삽입 할 수 있습니다.
-
-Truncate 가 delete from 보다 더 빠르다. 하지만 트랜잭션-safe 하지 않다.
-활성 트랜잭션 또는 활성 테이블 잠금 중 하나를 시도 할 때 오류가 발생한다.??
-ㄴ error occurs when attempting one in the course of an active transaction or active table lock
-
-Select 쿼리의 속도를 높이기 위해 인덱스를 고려한다.
-
-
-
-
-
-
-7. 쿼리작성 및 최적화
-쿼리가 빠르게 수행되게 하려면 쿼리가 어떻게 데이터를 가져올지 예측할 수 있어야 한다.
-Sql을 작성하는 방법이나 규칙은 물론, 내부적인 처리 방식(옵티마이저)에 대해 어느 정도의 지식이 필요하다. 
-애플리케이션 코드를 튜닝해서 성능을 2배 개선한다는 것은 쉽지 않은 일이다. 하지만 쿼리튜닝에서 “어떻게(HOW)”를 이해하면 몇십 배에서 몇백 배의 성능 향상은 흔한 일이다.
-
--mysql 서버의 설정파일 에서 sql_mode 설정
-ㄴ 키워드 확인 10가지.
-ㄴ mysql 기본적인 특징들 (길이 초과 시 초과 길이 이후 데이터 버리고 저장, 컬럼 타입과 다른 데이터 호환, 자동 trime 등)을 쓰고 싶지 않으면 해당 키워드 값 설정 해주면 된다. 
-
--영문 대소문자 구분
-ㄴ 설치된 os에 따라 테이블명의 대소문자구분  디스크의 디렉터리나 파일로 매핑되기 때문..
-ㄴ 유닉스 계열의 운영체제 에서는 대소문자 구분한다.
-ㄴ 설정파일 lower_case_table_names 시스템 변수 설정( 1: 모두 소문자로만 저장)
-
--Like 연산자 vs REGEXP 연산자
-ㄴREGEXP 연산자 보다는 훨씬 단순한 문자열 패턴 비교 연산자.
-ㄴ REGEXP 연산자는 인덱스를 전혀 사용하지 못한다. LIKE는 인덱스를 이용해 처리가능
-ㄴ REGEXP는 비교 대상 문자열의 일부에 대해서 일치해도 true리턴
-ㄴ LIKE 연산자는 와일드카드 문자가 검색어 뒤쪽에 있다면 인덱스 레인지 스캔으로 사용할 수 있지만 앞쪽에 있으면 사용이 불가능하다.(주의!!)
-ㄴ 와일드 카드가 앞쪽에 있으면 인덱스의 left-most 특성으로 레인지스켄 사용 못하고 인덱스 풀 스캔 방식으로 쿼리 처리…
-
--Between 연산자 vs 동등비교연산자
-SELECT * FROM dept_emp
-WHERE dept_no = ‘d003’ AND emp_no=10001;
-
-SELECT * FROM dept_emp
-WHERE dept_no BETWEEN ‘d003’ AND ‘d005’ AND emp_no = 10001;
-
-Idx (dept_no+emp_no)
-
-ㄴbetween은 크다, 작다 연산자와 같이 범위를 읽어야 하는 연산자라서.. 조건에 맞는 모든 인덱스 범위를 검색해야한다. 따라서 위에 동등비교 연산자가 와도 비교 범위를 줄이는 역할을 하지 못한다.
-ㄴ 결국 10만건을 읽어 1건을 반환.
-IN vs Between
-SELECT * FROM dept_emp
-WHERE dept_no IN (‘d003’, ‘d004’, ‘d005’) AND emp_no=10001;
-ㄴ 위와 같이 변경을 한다면 emp_no=10001도 작업범위를 줄이는 용도로 인덱스를 이용할 수 있게 된다.
-ㄴ IN (subquery)의 문제점… ? 서브쿼리가 먼저 실행되지 않고, 서브쿼리의 외부쿼리가 먼저 실행되고 in 서브쿼리는 체크조건으로 사용
-ㄴ in 연산자를 사용해 null 값을 검색할 수는 없다.
-ㄴ not in 의 실행계획은 인덱스 풀스캔 으로 표시, 동등이 아닌 부정형이라서 인덱스를 이용해 범위를 줄이는 조건으로 사용할 수 없다.
-
--쿼리 실행 순서
-ㄴ 쿼리 실행 순서를 변경하려면 서브쿼리로 작성된 인라인 뷰를 사용한다.
-ㄴ 인덱스는 칼럼의 값을 아무런 변환없이 B-tree에 정렬하여 저장한다. 따라서 인덱스 칼럼을 가공후 다른 상수와 값을 비교하면 인덱스를 적절히 이용하지 못한다.
-
-SELECT * FROM 슈_test WHERE age=2;
-ㄴ if) 실행 계획시에 인덱스 풀스캔을 탄다면??
-ㄴ age 컬럼타입이 varchar타입인데 비교되는 타입이 INTEGER임, 이렇게되면 mysql 옵티마이저가 내부적으로 문자열 타입을 숫자 타입으로 변환 후 비교 작업을 처리한다.
-ㄴ 문자열 타입인 age 컬럼이 숫자 타입으로 변환 후 비교돼야 하므로 인덱스 레인지 스캔이 불가능하다.
-ㄴ mysql 특징으로 컬럼 타입에 맞지 않는 다른 타입이 들어오면 자동 변환되서 들어가는데…. 그래서 크게 이슈가 없을 줄 알았는데…. 이런 문제가 있었다.,,, 
-ㄴ 저장하고자 하는 값의 타입에 맞게 칼럼의 타입을 선정하자.
-ㄴ 대부분 String 으로 잡는다………..  auto seq 값을 int(11)로 하고 내부적으로 string 값을 넘기는 것 같은데.. 라인페이 쿼리 실행 계획을 한번 보자… 5.6은 괜찮나?? 5.1, 5.5 에서 발생한다고 한다.
-
-주의** 문자열과 숫자를 비교할 때 나타나는 이러한 문제는 문자열 비교보다 숫자 값의 비교가 빨라서 mysql 옵티마이저가 숫자 타입에 우선권을 부여하기 때문에 발생하는 문제이다.
-이예제와는 반대로 테이블의 컬럼은 숫자타입인데, sql비교 조건을 문자열 값과 비교하는 경우에는 이런 현상이 발생하지 않는다. 
-상수값으로 지정한 문자열을 숫자타입으로 먼저 변환 후 age 컬럼과 비교하기 때문이다…
-
--where 조건이 인덱스를 사용하는 방법은 크게 범위 제한 조건과 체크 조건으로 구분한다.
-ㄴ 4개의 컬럼이 순서대로 결합 인덱스일 경우 col3의 조건이 동등조건이 아닌 크다 작다 비교이므로 뒤 컬럼인 col4의 조건은 범위 제한 조건으로 사용되지 못하고 체크 조건으로 사용된다.
-
-Where 절에서는 각 조건이 명시된 순서는 중요치 않고, 그 컬럼에 대한 조건이 있는지 없는지가 중요하다.
-
-조건이 or 일 때 주의하자…
-SELECT *  FROM employes
-WHERE first_name = ‘kebin’ OR last_name = ‘Poly’;
-ㄴ firtst_name 은 인덱스 이용가능, last_name은 인덱스를 사용할 수 없다.(풀테이블 스캔)
-ㄴ 풀테이블 스캔 + 인덱스 레인지 스캔 보다는 플테이블 스캔 한번이 더 빠르기 때문에
-위에 경우는 풀 스캔이 일어난다.
-ㄴ 만약 각 컬럼에 인덱스가 있다면 index_merge 접근 방법으로 실행 할 수 있다. 하지만… 제대로된 인덱스 하나를 레인지 스캔 하는 것보다는 느리다…
-
--group by 절 인덱스 사용
-ㄴ group by절에 명시된 칼럼의 순서가 인덱스를 구성하는 컬럼의 순서와 같으면 일단 인덱스를 이용할 수 있다.
-1.	Group by 절에 명시된 칼럼이 인덱스 칼럼의 순서와 위치가 같아야 한다.
-2.	인덱스를 구성하는 컬럼 중에서 뒤쪽에 있는 칼럼은 group by 절에 명시되어 있지 않아도 인덱스를 사용할 수 있지만 인덱스의 앞쪽에 있는 칼럼이 groub by 절에 명시되지 않으면 인덱스를 사용할 수 없다.
-3.	Where 조건 절과는 달리 groupby 절에 명시된 컬럼이 하나라도 인덱스에 없다면 group by 절은 전혀 인덱스를 이용하지 못한다.
-
-
-실행계획 type : Ref, range, index 의 차이? Mysql 옵티마이저가 레코드를 어떻게 읽었는지 의미한다. 인덱스를 사용했는지 여부,, 쿼리 튜닝시 필요한내용
-1.System : myisam, memory 테이블에서만 사용., 레코드가 1건만 존재하거나 한건도 없는테이블 조회시..
-2.Const : where 절에서 pk 나 unique 키 컬럼을 이용하고 반드시 1건을 반환. 복합키는 아님. 복합키여도 둘다 사용하면 const 노출
-3.Eq_ref : 여러테이블이 조인되는 쿼리의 실행 계획
-4.Ref : 복합키 컬럼중 일부만 조건으로 사용할 때
-5.Fulltext
-6.Ref_or_null
-7.Unique_subquery
-8.Index_subquery
-9.Range
-10.Index_merge
-11,Index
-12.all
--select절에 사용된 서브쿼리
-ㄴ 내부적으로 임시테이블을 만든다거나 쿼리를 비효율적으로 실행하도록 만들지는 않기 때문에 서브쿼리가 적절히 인덱스를 사용할 수 있다면 크게 주의할 사항은 없다.
-ㄴ select 절에서 서브쿼리를 사용하면 그 쿼리는 하나의 결과만 반환해야 한다.
-ㄴ 하지만 조인으로 처리해도 되는 쿼리를 select 의 서브 쿼리를 사용해서 작성할 때도 있다.
-하지만 서브쿼리로 실행하는 것보다는 조인으로 처리할 때가 훨씬 빠르기 때문에 가능하다면 조인으로 쿼리를 작성하는 것이 좋다.. (ex) 카테고리 테이블에서 여러 번 가져오는 쿼리.. 라인페이, 자동차
-
--where절에 단순 비교를 위해 사용된 서브쿼리
-Select * from dept_emp de
-Where de.emp_no = 
-(select e.emp_no from employess e where e.first_name=’georigi’ and e.last_name=’facello’ limit 1)
-ㄴ 다른 dbms 에서는 서브쿼리를 먼저 실행 후 상수로 변환하고, 그 조건을 범위 제한 조건으로 사용하는게 일반적이다.
-ㄴ mysql 에서는 dept_emp 테이블을 풀 테이블 스캔으로 레코드를 한건씩 읽으면서 서브쿼리를 매번 실행해서 서브쿼리가 포함된 조건이 참인지 비교한다.
-ㄴ mysql 은 서브 쿼리의 최적화가 부족하다!!
-ㄴ 외부쿼리의 비교저건이 동등 비교가 아니라 크다. 또는 작다와  같이 범위 비교 조건이더라도 결과는 마찬가지다.
-ㄴ 5.5 이상부터는 조금 최적화 됬나보다.. p480
-
--where 절에 in과 함께 사용된 서브쿼리
-ㄴ mysql 옵티마이저에 의해 in 부분이 exists 형태로 변환되어 실행되기 떄문이다. 
-ㄴ 따라서 외부 쿼리를 풀테이블 스캔을 사용할 수 밖에 없는 것
-ㄴ 5.6와서는 이것도 최적화가 되엇다.
-
--from 절 서브쿼리
-
-
+## 참고자료
