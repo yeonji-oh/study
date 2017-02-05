@@ -1,7 +1,6 @@
-# Building a Fastr and Stronger Web -Major Cineplex 앱보다 빠르게
+# Building a Faster and Stronger Web -Major Cineplex 앱보다 빠르게
 
-## 들어가며
--- 내용적어보고 한줄요약 할 내용 
+성능의 중요성에 대해 간략히 살펴보고 LINE Pay x MajorCineplex 프로젝트를 진행하면서 성능 향상에 고민했던 내용과 성능테스트 예시와 적용한 사례들을 공유하고 더 좋은 방법은 없는지 토론하면 좋겠습니다.
 
 ## 왜 성능이 중요한가? - 사용자 사용패턴
 
@@ -37,7 +36,7 @@
 *	지연이 되는 사이트는 사용자가 다시 방문하지 않을 확률이 굉장히 높다.
 
 ## 성능테스트 시작하기
-A: 이번에 open 하는 태국 서비스를 모바일웹 이기도 하니 성능적인것을 테스트 해봤으면 좋겠다.+
+이번에 open 하는 태국 서비스를 모바일웹 이기도 하니 성능적인것을 테스트 해봤으면 좋겠다.... 라는 요구사항이 있었다.+
 그동안 성능에 문제가 발견됬을 때만 문제점을 찾아 개선하는 식이었는데 출시전 성능테스트는 어떻게 할까... 고민을 많이 했다.
 
 #### 퍼포먼스란 ? 어디에 중점을 두어야 할까?
@@ -64,7 +63,7 @@ A: 이번에 open 하는 태국 서비스를 모바일웹 이기도 하니 성�
 - 찰스 : HTTP proxy를 구성해서 웹 클라이언트와 서버 사이를 오가는 통신을 가로채서 둘 사이의 모든 요청과 응답
  그리고 HTTP headers를 적나라하게 보  여주는 아주 막강한 웹 디버깅 애플리케이션.
 - 유료툴이므로 학습시간 및 비용 소요 (사내라이선스)
-- 앱 proxy 설정방법 링크 및 import
+- 앱 proxy 설정방법 : https://github.com/yeonji-oh/study/blob/master/seminar/charlesProxySetting.md
 
 ![charles2](./charles2.png)
 [그림 3] charles 실행 화면
@@ -105,9 +104,10 @@ A: 이번에 open 하는 태국 서비스를 모바일웹 이기도 하니 성�
 - 단점 : 스크립트 과다 사용에 의한 성능 감소
 
 ###### CSS, Image 파일 cdn 업로드
-- 리소스를 외부에 두었을  좋은점?
 - Image optimization, CSS preprocessors : 이미지와 스타일링은 Front-end 성능 최적화의 핵심요소.
 - 적절한 component의 선택은 서비스의 확장성(Scalability)뿐 아니라 성능에도 영향
+- CDN과 도메인이 분리되어 있어 로컬컨텐츠들과 cdn을 병렬로 다운로드 할 수 있다.
+- CDN 캐시를 통해 더 빠른 속도로 읽어 올 수 있다.
 
 ###### 기타 Front-End 성능 tips
 - 인라인 이미지 (inline image) 등을 이용해서 가급적 서버로의 요청 횟수를 줄인다.
@@ -274,13 +274,7 @@ EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE movie_title_en NOT IN (SELE
 
 [그림 6] subquery 실행계획
 
-#### 7. delete
-- Truncate 가 delete from 보다 더 빠르다. 
-- 하지만 트랜잭션-safe 하지 않다.
-- 활성 트랜잭션 또는 활성 테이블 잠금 중 하나를 시도 할 때 오류가 발생한다.??
- - error occurs when attempting one in the course of an active transaction or active table lock
-
-#### 8. 문자열과 숫자 비교
+#### 7. 문자열과 숫자 비교
 - cinema_id는 문자열 컬럼, where절 문자열 vs 숫자비교
 
 ```xml
@@ -298,11 +292,13 @@ EXPLAIN SELECT * FROM cineplex_movie_showtimes WHERE cinema_id = 0000000002;
 - 반대로 테이블의 컬럼은 숫자타입인데, sql비교 조건을 문자열 값과 비교하는 경우에는 이런 현상이 발생하지 않는다. 
  - 상수값으로 지정한 문자열을 숫자타입으로 먼저 변환 후 cinema_id 컬럼과 비교하기 때문이다.
  
-## 마무리
-개발을 진행하면서 몰랐던 속도개선건 까지 확인을 하니 시간이 좀 부족한것 같다 학습시간이 요 내용을 바탕으로 성능개선을 위해 처리해야할 것들이 많은데3g, 4g, lte등등 좀더 알아보고정리를해야겠
+## 마치며
 예전에 전사 이슈로 서비스 속도개선건이 화두에 오른적이 있었다. 그때는 Script, CSS, Image Size 등 Front-End 에 초점이 맞춰져 있었다. 그 후에 스크립트 lazy loading 이나 cdn 사용으로만 처리하고 성능테스트는 자세히 하지 않았던 것 같다. 대충 서비스 돌려보고.. 빠름, 보통, 느림 으로 구분을 했었다..
 이번엔 기존에 존재하는 major Cineplex 앱이 너무 느려서.. line 웹뷰로 서비스를 할 때 좀더 빠르게 할 수 없을까.. 고민을 많이 했다.
-이를 계기로 성능 최적화에 대한 다방면으로 알 수 있었고, 쿼리성능 향상에 깊은 고민을 해본 좋은 기회라고 생각한다.
+사실 모바일관련 성능테스트에 대해 기술적으로 더 알아보고 싶었는데 자료도 별로 없는 것 같고 학습시간이 많이 필요할 것 같아 쿼리 쪽을 집중적으로 봤다. 이 후에도 네트워크 환경(3g, 4g, lte)은 성능등 모바일 최적화를 어떻게 하는지에 대해 계속 관심을 가질 생각이다.
+이번을 계기로 성능 최적화에 대한 다방면으로 알 수 있었고, 쿼리성능 향상에 깊은 고민을 해본 좋은 기회라고 생각한다.
 이런 내용을 알고 좋은 개발 습관을 가진다면 사용자의 만족도를 높이는 빠르고 좋은 서비스를 만들 수 있을 것 같다.
 
 ## 참고자료
+- [도서] 개발자와 DBA를 위한 Real MySQL
+- My SQL Documents : ttps://dev.mysql.com/doc/refman/5.7/en/insert-speed.html
