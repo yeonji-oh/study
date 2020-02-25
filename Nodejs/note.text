@@ -1,0 +1,7 @@
+node js 시작하기
+
+nodejs 설치
+
+sample.js는 node js로 웹서버 만드는 예제
+sample.js 위치로 가서 > node sample.js 명령어 실행
+브라우저에서 127.0.0.1:3000 실행 > hello world 노출
